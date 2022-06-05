@@ -288,7 +288,8 @@ module Main (C : Mirage_console.S) (R : Mirage_random.S) (T : Mirage_time.S) (Pc
       let close () =
         tls_access `Close;
         frontend_access `Close;
-        TLS.close tls_flow
+        TLS.close tls_flow >>= fun () ->
+        Public.TCP.close tcp_flow
       in
       match TLS.epoch tls_flow with
       | Ok epoch ->
@@ -321,10 +322,12 @@ module Main (C : Mirage_console.S) (R : Mirage_random.S) (T : Mirage_time.S) (Pc
               close ()
             | Ok tcp_flow ->
               backend_access `Open;
-              Lwt.join [
+              Lwt.pick [
                 read_tls_write_tcp tls_flow tcp_flow ;
                 read_tcp_write_tls tcp_flow tls_flow
-              ]
+              ] >>= fun () ->
+              close () >>= fun () ->
+              Private.TCP.close tcp_flow
         end
       | Error () ->
         Logs.warn (fun m -> m "unexpected error retrieving the TLS session");
